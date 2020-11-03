@@ -68,15 +68,13 @@ class NMT(nn.Module):
         ###         https://pytorch.org/docs/stable/nn.html#torch.nn.Dropout
 
         self.encoder = nn.LSTM(embed_size, hidden_size, bias=True, bidirectional=True)
-        self.decoder = nn.LSTM(embed_size + hidden_size, hidden_size, bias=True)
-        # Projection output R^2*h
-        self.h_projection = nn.LSTM(hidden_size * 2, hidden_size, bias=False)
+        self.decoder = nn.LSTMCell(embed_size + hidden_size, hidden_size, bias=True)
+        self.h_projection = nn.Linear(hidden_size * 2, hidden_size, bias=False)
         self.c_projection = nn.Linear(hidden_size * 2, hidden_size, bias=False)
         self.att_projection = nn.Linear(hidden_size * 2, hidden_size, bias=False)
         self.combined_output_projection = nn.Linear(hidden_size * 3, hidden_size, bias=False)
         self.target_vocab_projection = nn.Linear(hidden_size, len(vocab.tgt), bias=False)
         self.dropout = nn.Dropout(self.dropout_rate)
-
         ### END YOUR CODE
 
     def forward(self, source: List[List[str]], target: List[List[str]]) -> torch.Tensor:
@@ -168,13 +166,17 @@ class NMT(nn.Module):
 
         X = self.model_embeddings.source(source_padded)
         X = nn.utils.rnn.pack_padded_sequence(X, lengths=source_lengths)
+
         enc_hiddens, (last_hidden, last_cell) = self.encoder(X)
-        enc_hiddens, _ = nn.utils.rnn.pack_padded_sequence(enc_hiddens)
-        enc_hiddens = enc_hiddens.transpose (0,1)
+        enc_hiddens, _ = nn.utils.rnn.pad_packed_sequence(enc_hiddens)
+        enc_hiddens = enc_hiddens.transpose(0, 1)
+
         last_hidden = torch.cat((last_hidden[0], last_hidden[1]), 1)
         init_decoder_hidden = self.h_projection(last_hidden)
+
         last_cell = torch.cat((last_cell[0], last_cell[1]), 1)
         init_decoder_cell = self.c_projection(last_cell)
+
         dec_init_state = (init_decoder_hidden, init_decoder_cell)
         ### END YOUR CODE
 
